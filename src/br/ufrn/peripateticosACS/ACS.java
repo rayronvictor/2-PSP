@@ -28,6 +28,9 @@ public class ACS {
 	/** coeficiente de evaporação local  */
 	private float ksi;
 	
+	/** quantidade de feromônio que uma formiga despeja em um caminho */
+	private float Q;
+	
 	/** nós que representam o grafo */
 	private List<Node> nodes;
 	/** número de nós */
@@ -39,9 +42,10 @@ public class ACS {
 	private List<Ant> ants;
 	
 	
-	public ACS(int iterations, int numberOfAnts, float alpha, float beta, float q0, float rho, float ksi) {
+	public ACS(int iterations, int numberOfAnts, float Q, float alpha, float beta, float q0, float rho, float ksi) {
 		this.iterations = iterations;
 		this.numberOfAnts = numberOfAnts;
+		this.Q = Q;
 		this.alpha = alpha;
 		this.beta = beta;
 		this.q0 = q0;
@@ -233,7 +237,7 @@ public class ACS {
 			current = globalBestTour.get(i).id-1;
 			next = globalBestTour.get(i+1).id-1;
 			
-			pheromoneMatrix.get(current).set(next, (((1 - rho) * pheromoneMatrix.get(current).get(next)) + (rho * (1/globalBestTourLength))) );
+			pheromoneMatrix.get(current).set(next, (((1 - rho) * pheromoneMatrix.get(current).get(next)) + (Q * (1/globalBestTourLength))) );
 			pheromoneMatrix.get(next).set(current, pheromoneMatrix.get(current).get(next));
 		}
 	}

@@ -9,7 +9,7 @@ public class Main {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		ACS acs = new ACS(10, 5, 1.f, 3.f, 0.9f, 0.1f, 0.1f);
+		ACS acs = new ACS(50, 38, 100.f, 1.f, 2.f, 0.9f, 0.7f, 0.1f);
 		acs.start();
 		
 //		ACS acs = new ACS(10, 50, 3.0f, 0.9f, 0.1f, 0.1f);
