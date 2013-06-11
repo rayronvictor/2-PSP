@@ -1,16 +1,22 @@
 package br.ufrn.peripateticosACS;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+
+
 
 public class Node {
 
 	public final int id;
 	public final double[] coordinate;
+	public List<Node> connections;
 	
 	public Node(int id, double... coordinate) {
 		super();
 		this.id = id;
 		this.coordinate = coordinate;
+		this.connections = new ArrayList<Node>();
 	}
 	
 	@Override
@@ -19,6 +25,7 @@ public class Node {
 		int result = 1;
 		result = prime * result + id;
 		result = prime * result + Arrays.hashCode(coordinate);
+		result = prime * result + connections.hashCode();
 		return result;
 	}
 
@@ -43,6 +50,10 @@ public class Node {
 		}
 		
 		if (!Arrays.equals(coordinate, other.coordinate)) {
+			return false;
+		}
+		
+		if (!connections.equals(other.connections)) {
 			return false;
 		}
 

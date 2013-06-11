@@ -1,35 +1,229 @@
 package br.ufrn.peripateticosACS;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.IOException;
 
-public class Main {
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.WindowConstants;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+
+public class Main extends JFrame implements ActionListener, ListSelectionListener{
+	
+	private JPanel mainPane;
+	
+	private JTextField txtIterations;
+	private JTextField txtNumberOfAnts;
+	private JTextField txtQ;
+	private JTextField txtAlpha;
+	private JTextField txtBeta;
+	private JTextField txtQ0;
+	private JTextField txtRho;
+	private JTextField txtKsi;
+	
+	private JCheckBox cbWithLocalSearch;
+	
+	private JList listOptions;
+	private JButton btnStart;
+	private JTextArea txtOutput;
+	private String instanceFile;
+	
+	
+	public Main() {
+		super("PCV 2-Peripatéticos");
+		
+		setResizable(true);
+		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		
+		mainPane = new JPanel();
+		mainPane = new JPanel();
+		mainPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+		mainPane.setLayout(new BorderLayout(0, 0));
+		setContentPane(mainPane);
+		
+		initComponents();
+		
+		this.pack();
+		this.setVisible(true);
+	}
+	
+	public void initComponents() {
+		listOptions = new JList( new ListOfInstances(load()));
+		listOptions.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		listOptions.addListSelectionListener(this);
+
+		JScrollPane listOptionsScrollPane = new JScrollPane(listOptions);
+		listOptionsScrollPane.setMaximumSize(new Dimension(200, 150));
+		listOptionsScrollPane.setBorder(new EmptyBorder(0, 0, 0, 0));
+		
+		JPanel instancesPane = new JPanel();
+		instancesPane.setBorder(new EmptyBorder(0, 50, 0, 0));
+		instancesPane.setLayout(new BoxLayout(instancesPane, BoxLayout.Y_AXIS));
+		
+		btnStart = new JButton("Iniciar");
+		btnStart.addActionListener(this);
+		
+		instancesPane.add(new JLabel("intâncias"));
+		instancesPane.add(listOptionsScrollPane);
+		instancesPane.add(Box.createGlue());
+		instancesPane.add(btnStart);
+		
+		mainPane.add(instancesPane, BorderLayout.EAST);
+		
+		JPanel optionsPane = new JPanel(new GridLayout(0, 2));
+		
+		JLabel lbl1 = new JLabel("iterações: ");
+		optionsPane.add(lbl1);
+		
+		txtIterations = new JTextField("150");
+		optionsPane.add(txtIterations);
+		
+		JLabel lbl2 = new JLabel("n. formigas: ");
+		optionsPane.add(lbl2);
+		
+		txtNumberOfAnts = new JTextField("25");
+		optionsPane.add(txtNumberOfAnts);
+		
+		JLabel lbl3 = new JLabel("Q: ");
+		optionsPane.add(lbl3);
+		
+		txtQ = new JTextField("1");
+		optionsPane.add(txtQ);
+
+		JLabel lbl4 = new JLabel("alpha: ");
+		optionsPane.add(lbl4);
+		
+		txtAlpha = new JTextField("1");
+		optionsPane.add(txtAlpha);
+		
+		JLabel lbl5 = new JLabel("beta: ");
+		optionsPane.add(lbl5);
+		
+		txtBeta = new JTextField("2");
+		optionsPane.add(txtBeta);
+		
+		JLabel lbl6 = new JLabel("q0: ");
+		optionsPane.add(lbl6);
+		
+		txtQ0 = new JTextField("0.9");
+		optionsPane.add(txtQ0);
+		
+		JLabel lbl7 = new JLabel("rho: ");
+		optionsPane.add(lbl7);
+		
+		txtRho = new JTextField("0.7");
+		optionsPane.add(txtRho);
+		
+		JLabel lbl8 = new JLabel("ksi: ");
+		optionsPane.add(lbl8);
+		
+		txtKsi = new JTextField("0.7");
+		optionsPane.add(txtKsi);
+		
+		JLabel lbl9 = new JLabel("busca local: ");
+		optionsPane.add(lbl9);
+		
+		cbWithLocalSearch = new JCheckBox();
+		optionsPane.add(cbWithLocalSearch);
+		
+		mainPane.add(optionsPane, BorderLayout.CENTER);
+		
+		txtOutput = new JTextArea(20, 0);
+		txtOutput.setEditable(false);
+		
+		JScrollPane outputScrollPane = new JScrollPane(txtOutput);
+		outputScrollPane.setBorder(new EmptyBorder(0, 0, 0, 0));
+		
+		mainPane.add(outputScrollPane, BorderLayout.SOUTH);
+		
+	}
+	
+	@Override
+	public void actionPerformed(ActionEvent e) {
+		if(e.getSource() == btnStart) {
+			iniciar();
+		}
+		
+	}
+	
+	public void iniciar() {
+		Thread thread = new Thread() {
+			
+			@Override
+			public void run() {
+				if(instanceFile != null && !instanceFile.equals("")) {
+					txtOutput.setText("");
+					btnStart.setEnabled(false);
+					
+					ACS acs = new ACS(
+							2, 												// m-peripatéticos, com m=2
+							Integer.valueOf(txtIterations.getText()),		// iterações
+							Integer.valueOf(txtNumberOfAnts.getText()),		// número de formigas
+							Float.valueOf(txtQ.getText()),					// Q, quantidade de feromônio depositado
+							Float.valueOf(txtAlpha.getText()),				// alpha, influência do feromônio
+							Float.valueOf(txtBeta.getText()),				// beta, influência da distância
+							Float.valueOf(txtQ0.getText()),					// q0, controle para um aleatório proporcional
+							Float.valueOf(txtRho.getText()),				// rho, evaporação global
+							Float.valueOf(txtKsi.getText()));				// ksi, evaporação local
+					
+					acs.setWithLocalSearch(cbWithLocalSearch.isSelected());
+					acs.setOutput(txtOutput);
+					acs.start(instanceFile);
+					
+					btnStart.setEnabled(true);
+				}else {
+					JOptionPane.showMessageDialog(null, "Selecione uma instância!");
+				}
+			}
+		};
+		thread.start();
+	}
+	
+	@Override
+	public void valueChanged(ListSelectionEvent e) {
+		if(e.getSource() == listOptions && e.getValueIsAdjusting()) {
+			instanceFile = (String)listOptions.getSelectedValue();
+		}
+	}
+	
+	public static File[] load() {
+		try {
+			String applicationPath = new File(".").getCanonicalPath();
+			File folder = new File(applicationPath + "/lib");
+			File[] files = folder.listFiles(new OnlyExt("tsp"));
+			
+			return files;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+		
+	}
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		ACS acs = new ACS(50, 38, 100.f, 1.f, 2.f, 0.9f, 0.7f, 0.1f);
-		acs.start();
-		
-//		ACS acs = new ACS(10, 50, 3.0f, 0.9f, 0.1f, 0.1f);
-//		List<Node> nodes = acs.loadNodes();
-//		
-//		int[] arr = {3, 73, 59, 41, 89, 30, 68, 2, 35, 23, 21, 70, 76, 91, 94, 95, 50, 62, 83, 72, 86, 5, 43, 56, 71, 38, 39, 28, 88, 98, 58, 34, 90, 25, 17, 8, 22, 75, 54, 6, 80, 77, 65, 31, 47, 67, 55, 42, 20, 64, 79, 13, 15, 27, 85, 1, 53, 40, 12, 49, 18, 29, 46, 24, 32, 7, 82, 78, 9, 26, 61, 37, 16, 51, 63, 44, 66, 48, 84, 11, 52, 87, 96, 97, 81, 45, 33, 100, 74, 57, 36, 14, 10, 92, 19, 99, 93, 4, 60, 69, 3};
-//		double total = 0.0;
-//
-//		for(int i = 0; i < arr.length-1; i++) {
-//			total += acs.calculateDistance(nodes.get(arr[i]-1), nodes.get(arr[i+1]-1));
-//		}
-//		System.out.println(total);
-//		for(int i = 0; i < arr.length; i++) {
-//			for(int j = i+1; j < arr.length; j++) {
-//				if(arr[i] == arr[j]) {
-//					System.out.print("value: " + arr[i]);
-//					System.out.println(", i: " + i + ", j: " + j);
-//				}
-//			}
-//		}
+		Main m = new Main();
 	}
+	
 
 }

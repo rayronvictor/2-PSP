@@ -6,9 +6,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.JOptionPane;
+import javax.swing.JTextArea;
+
 
 public class ACS {
+	
+	/** número de peripatéticos */
+	private int m;
 	
 	/** número de iterações */
 	private int iterations;
@@ -31,18 +35,23 @@ public class ACS {
 	/** quantidade de feromônio que uma formiga despeja em um caminho */
 	private float Q;
 	
+	/** flag para saber se usa busca local */
+	private boolean withLocalSearch = false; 
+	
 	/** nós que representam o grafo */
 	private List<Node> nodes;
 	/** número de nós */
 	private int numberOfNodes;
 	/** maatriz de feromônios */
 	private List<List<Double>> pheromoneMatrix;
-	
+
 	/** as trabalhadoras, digo, formigas */
 	private List<Ant> ants;
 	
+	private JTextArea output; 
 	
-	public ACS(int iterations, int numberOfAnts, float Q, float alpha, float beta, float q0, float rho, float ksi) {
+	public ACS(int m, int iterations, int numberOfAnts, float Q, float alpha, float beta, float q0, float rho, float ksi) {
+		this.m = m;
 		this.iterations = iterations;
 		this.numberOfAnts = numberOfAnts;
 		this.Q = Q;
@@ -57,9 +66,8 @@ public class ACS {
 	}
 	
 	/** lê o arquivo e carrega os nós */
-	public List<Node> loadNodes(){
-		String file = JOptionPane.showInputDialog("Qual o nome da instância? (sem extensão)");
-		file = "./lib/" + file + ".tsp";
+	public List<Node> loadNodes(String file){
+		file = "./lib/" + file;
 		List<Node> nl = new ArrayList<Node>();
 		
 		try {
@@ -67,7 +75,7 @@ public class ACS {
 			String line;
 			
 			while ((line = reader.readLine()) != null) {
-				String[] v = line.trim().split(" ");
+				String[] v = line.trim().split("\\s+");
 				Node n;
 				if(v.length == 3) {
 					n = new Node(
@@ -93,15 +101,15 @@ public class ACS {
 		return nl;
 	}
 	
-	public void start() {
+	public void start(String instanceFile) {
 		
-		this.nodes = loadNodes();
+		this.nodes = loadNodes(instanceFile);
 		this.numberOfNodes = this.nodes.size();
 		
 		long beginTime = System.currentTimeMillis();
 		
-		double tau0 = 1/(numberOfNodes * nearestNeighborTour(new ArrayList<Node>(this.nodes)));
-		
+		double tau0 = 1/(numberOfNodes * nearestNeighborTour(this.nodes));
+
 		for(int i = 0; i < numberOfAnts; i++) {
 			ants.add(new Ant(i));
 		}
@@ -109,7 +117,7 @@ public class ACS {
 		systemStart(tau0);
 		
 		long endTime = System.currentTimeMillis();
-		System.out.println("Executing time: " + ((endTime-beginTime)/1000) + "s");
+		output.append("Executing time: " + ((endTime-beginTime)/1000) + "s\n");
 	}
 	
 	/** inicia o sistema de colônia de formigas */
@@ -117,49 +125,82 @@ public class ACS {
 		
 		initializePheromone(tau0);
 		
-		List<Node> bestTour = new ArrayList<Node>();
-		List<Node> globalBestTour = new ArrayList<Node>();
+		List<List<Node>> bestCycles = new ArrayList<List<Node>>();
+		List<List<Node>> globalBestCycles = new ArrayList<List<Node>>();
 		
-		double globalBestTourLength = 0;
+		double globalBestCyclesLength = 0;
 		
 		for(int i = 0; i < iterations; i++) {
-			System.out.println("iteração " + (i+1));
-			double bestTourLength = 0;
+			if(i % 100 == 0) output.append("\niteração " + (i+1));
+			double bestCyclesLength = 0;
 			
-			initializeTours(bestTour);
+			bestCycles.clear();
+			
+			initializeTours();
 			
 			for(int j = 0; j < numberOfAnts; j++) {
-				tourConstruction(ants.get(j), new ArrayList<Node>(this.nodes));
+				List<List<Node>> cycles = new ArrayList<List<Node>>();
+				double antCycleLength = 0;
 				
-				localPheromoneUpdate(ants.get(j), tau0);
-				
-				Ant a = localSearch(ants.get(j).id, new ArrayList<Node>(ants.get(j).tour), ants.get(j).tourLength);
-				ants.get(j).tour = new ArrayList<Node>(a.tour);
-				ants.get(j).tourLength = a.tourLength;
-				
-				if(bestTourLength == 0 || bestTourLength > ants.get(j).tourLength) {
-					bestTour = new ArrayList<Node>(ants.get(j).tour);
-					bestTourLength = ants.get(j).tourLength;
+				Node antInitialNode = ants.get(j).tour.get(0);
+						
+				for(int k = 0; k < m; k++) {
+					tourConstruction(ants.get(j), new ArrayList<Node>(this.nodes));
+
+					//localPheromoneUpdate(ants.get(j), tau0);
+					
+					cycles.add(new ArrayList<Node>(ants.get(j).tour));
+					antCycleLength += ants.get(j).tourLength;
+					
+					ants.get(j).tour.clear();
+					ants.get(j).tourLength = 0;
+					
+					ants.get(j).tour.add(antInitialNode);
 				}
-			}
-			
-			if(globalBestTourLength == 0 || globalBestTourLength > bestTourLength) {
-				globalBestTour = new ArrayList<Node>(bestTour);
-				globalBestTourLength = bestTourLength;
 				
-				//printTour(bestTour, bestTourLength, "Best Tour until now");
+				if(withLocalSearch) {
+					antCycleLength = localSearch(cycles, antCycleLength);
+				}
+				
+				if(bestCyclesLength == 0 || bestCyclesLength > antCycleLength) {
+					bestCycles.clear();
+					
+					for(List<Node> cycle : cycles) {
+						bestCycles.add(new ArrayList<Node>(cycle));
+					}
+					
+					bestCyclesLength = antCycleLength;
+					//System.out.println("best until now: " +  antCycleLength);
+				}
+				
+				localPheromoneUpdate(cycles, tau0);
+				
+				clearNodesConnections(nodes);
 			}
 			
-			globalPheromoneUpdate(globalBestTour, globalBestTourLength);
+			//bestCyclesLength = localSearch(bestCycles, bestCyclesLength);
+			
+			if(globalBestCyclesLength == 0 || globalBestCyclesLength > bestCyclesLength) {
+				globalBestCycles.clear();
+				
+				for(List<Node> cycle : bestCycles) {
+					globalBestCycles.add(new ArrayList<Node>(cycle));
+				}
+				
+				globalBestCyclesLength = bestCyclesLength;
+				output.append("\nglobal best until now: " +  globalBestCyclesLength);
+				
+				//printTour(globalBestCycles, globalBestCyclesLength, "Best Tour until now");
+			}
+
+			globalPheromoneUpdate(globalBestCycles, globalBestCyclesLength);
 		}
 		
-		printTour(globalBestTour, globalBestTourLength, "Global Best Tour");
+		printTour(globalBestCycles, globalBestCyclesLength, "Global Best Tour");
 	}
 	
 	/** inicia o tour de cada formiga em um nó aleatoriamente */
-	public void initializeTours(List<Node> bestTour) {
-		bestTour.clear();
-		
+	public void initializeTours() {
 		List<Integer> randomNodes = new ArrayList<Integer>();
 		for(int i = 0; i < numberOfNodes; i++)  
 			randomNodes.add(i);
@@ -172,101 +213,145 @@ public class ACS {
 			ants.get(i).tour.add(this.nodes.get( randomNodes.get(i%numberOfAnts)));
 		}
 	}
-	
+
 	/** faz uma busca local no tour de uma formiga e tenta melhorá-lo */
-	public Ant localSearch(int antId, List<Node> antTour, double antTourLength) {
-		
-		Ant ant = new Ant(-1);
-		ant.tour = new ArrayList<Node>(antTour);
-		ant.tourLength = antTourLength;
+	public double localSearch(List<List<Node>> antCycles, double antCyclesLength) {
 		
 		double best;
-		List<Node> newAntTour;
-		double newAntTourLength;
+		List<List<Node>> newAntCycles;
+		double newAntCyclesLength;
 		
 		while(true) {
-			best = ant.tourLength;
+			best = antCyclesLength;
 
-			for(int i = 0; i < ant.tour.size()-1; i++) {
-				for(int j = i + 1; j < ant.tour.size(); j++) {
-					newAntTour = new ArrayList<Node>(ant.tour);
+			for(int i = 0; i < antCycles.get(0).size()-1; i++) {
+				for(int j = i + 1; j < antCycles.get(0).size(); j++) {
+					
 					int k = i;
 					int l = j;
+					newAntCyclesLength = 0;
+					
+					newAntCycles = new ArrayList<List<Node>>();
+					for(List<Node> c : antCycles) {
+						newAntCycles.add(c);
+					}
 					
 					while(k < l) {
-						// swap
-						Node temp = newAntTour.get(k);
-						newAntTour.set(k, newAntTour.get(l));
-						newAntTour.set(l, temp);
 						
-						// está trocando o primeiro elemento?
-						if(k == 0) {
-							// garante que ainda continuará sendo um ciclo
-							newAntTour.set(ant.tour.size() - 1, newAntTour.get(k));
-						}
+						Node n1 = newAntCycles.get(0).get(k);
+						Node n2 = newAntCycles.get(0).get(l);
 						
-						// está trocando o último elemento elemento?
-						if(l == ant.tour.size() - 1) {
-							newAntTour.set(0, newAntTour.get(l));
+						// swap nas conexões
+						List<Node> tempConnections = new ArrayList<Node>(n1.connections);
+						n1.connections = new ArrayList<Node>(n2.connections);
+						n2.connections = new ArrayList<Node>(tempConnections);
+						
+						for(List<Node> c : newAntCycles) {
+							// swap
+							Node temp = c.get(k);
+							c.set(k, c.get(l));
+							c.set(l, temp);
+							
+							// está trocando o primeiro elemento?
+							if(k == 0) {
+								// garante que ainda continuará sendo um ciclo
+								c.set(c.size() - 1, c.get(k));
+							}
+							
+							// está trocando o último elemento elemento?
+							if(l == antCycles.get(0).size() - 1) {
+								c.set(0, c.get(l));
+							}
+							
+							newAntCyclesLength += calculateCost(c);
 						}
 						
 						k += 1;
 						l -= 1;
 					}
 					
-					newAntTourLength = calculateCost(newAntTour);
-					
-					if(newAntTourLength < ant.tourLength) {
-						ant.tourLength = newAntTourLength;
-						ant.tour = new ArrayList<Node>(newAntTour);
+					if(newAntCyclesLength < antCyclesLength) {
+						antCyclesLength = newAntCyclesLength;
+						antCycles = new ArrayList<List<Node>>();
+
+						for(List<Node> c : newAntCycles) {
+							antCycles.add(c);
+						}
 					}
 				}
 			}
 			
-			if(best == ant.tourLength) {
-				return ant;
+			if(best == antCyclesLength) {
+				return antCyclesLength;
 			}
 		}
 	}
 	
 	/** atualiza o feromônio global, ou seja, depois de cada iteração*/
-	public void globalPheromoneUpdate(List<Node> globalBestTour, double globalBestTourLength) {
+	public void globalPheromoneUpdate(List<List<Node>> globalBestCycles, double globalBestCyclesLength) {
 		int current, next;
 		
-		for(int i = 0; i < globalBestTour.size()-1; i++) {
-			current = globalBestTour.get(i).id-1;
-			next = globalBestTour.get(i+1).id-1;
+		for(List<Node> cycle : globalBestCycles) {
+		
+			for(int i = 0; i < cycle.size()-1; i++) {
+				current = cycle.get(i).id-1;
+				next = cycle.get(i+1).id-1;
+				
+				pheromoneMatrix.get(current).set(next, (((1 - rho) * pheromoneMatrix.get(current).get(next)) + (Q * (1/globalBestCyclesLength))) );
+				pheromoneMatrix.get(next).set(current, pheromoneMatrix.get(current).get(next));
+			}
 			
-			pheromoneMatrix.get(current).set(next, (((1 - rho) * pheromoneMatrix.get(current).get(next)) + (Q * (1/globalBestTourLength))) );
-			pheromoneMatrix.get(next).set(current, pheromoneMatrix.get(current).get(next));
 		}
 	}
 	
 	/** atualiza o feromônio local, ou seja, depois da formiga percorrer um tour */
-	public void localPheromoneUpdate(Ant ant, double tau0) {
+	public void localPheromoneUpdate(List<List<Node>> cycles, double tau0) {
 		int current, next;
 		
-		for(int i = 0; i < ant.tour.size()-1; i++) {
-			current = ant.tour.get(i).id-1;
-			next = ant.tour.get(i+1).id-1;
-			
-			pheromoneMatrix.get(current).set(next, (((1 - ksi) * pheromoneMatrix.get(current).get(next)) + (ksi * tau0)) );
-			pheromoneMatrix.get(next).set(current, pheromoneMatrix.get(current).get(next));
+		for(List<Node> cycle : cycles) {
+			for(int i = 0; i < cycle.size()-1; i++) {
+				current = cycle.get(i).id-1;
+				next = cycle.get(i+1).id-1;
+				
+				pheromoneMatrix.get(current).set(next, (((1 - ksi) * pheromoneMatrix.get(current).get(next)) + (Q * tau0)) );
+				pheromoneMatrix.get(next).set(current, pheromoneMatrix.get(current).get(next));
+			}
 		}
 	}
 	
 	/** constroi um tour para uma formiga */
 	public void tourConstruction(Ant ant, List<Node> nl) {
+		
 		Node currentNode = ant.tour.get(0);
 		nl.remove(currentNode);
 		
 		Node nextNode;
 		for(int i = 0; i < numberOfNodes-2; i++) {
 			nextNode = findNextNode(currentNode, nl);
+			
+			if(nextNode == null) {
+				ant.tour.remove(currentNode);
+				nl.add(currentNode);
+				
+				Node temp = currentNode.connections.get(currentNode.connections.size()-1);
+				currentNode.connections.remove(temp);
+				temp.connections.remove(currentNode);
+				
+				currentNode = temp;
+				i = i - 2;
+				continue;
+			}
+			
+			currentNode.connections.add(nextNode);
+			nextNode.connections.add(currentNode);
+			
 			ant.tour.add(nextNode);
 			currentNode = nextNode;
 			nl.remove(nextNode);
 		}
+		
+		nl.get(0).connections.add(ant.tour.get(0));
+		ant.tour.get(0).connections.add(nl.get(0));
 		
 		ant.tour.add(nl.get(0));
 		ant.tour.add(ant.tour.get(0));
@@ -279,7 +364,8 @@ public class ACS {
 		List<Double> tauEtha = new ArrayList<Double>();
 		
 		double rand = Math.random();
-		double totalTauEtha = calculateTauEtha(currentNode, nl, tauEtha);
+		List<Node> currentNodeNeighbors = getNeighbors(currentNode, nl);
+		double totalTauEtha = calculateTauEtha(currentNode, currentNodeNeighbors, tauEtha);
 		
 		/** existe q0 porcentos de chance de escolher
 		 *  o nó de maior feromônio, caso contrário
@@ -287,22 +373,27 @@ public class ACS {
 		 *  tem mais chance de ser escolhido
 		 * */
 		if(rand < q0) {
-			double argmax = Collections.max(tauEtha);
-			return nl.get(tauEtha.indexOf(argmax));
+			List<Double> temp = new ArrayList<Double>(tauEtha);
+			Collections.sort(temp, Collections.reverseOrder());
+			
+			for(Double d : temp) {
+				if( !currentNode.connections.contains(currentNodeNeighbors.get(tauEtha.indexOf(d)))) {
+					return currentNodeNeighbors.get(tauEtha.indexOf(d));
+				}
+			}
 		}else {
 			double roulette = 0.0;
 			rand = Math.random() * totalTauEtha;
 			
-			for(int i = 0; i < nl.size(); i++) {
+			for(int i = 0; i < currentNodeNeighbors.size(); i++) {
 				roulette += tauEtha.get(i);
 				
-				if(rand < roulette) {
-					return nl.get(i);
-				}
+					if(rand < roulette) {
+						return currentNodeNeighbors.get(i);
+					}
 			}
 		}
 		
-		System.out.println("!!!!!!!!!! findNextNode: returned null");
 		return null;
 		
 	}
@@ -348,44 +439,84 @@ public class ACS {
 		}
 	}
 	
-	/** tour entre os vizinhos mais próximos para inicializar o feromônio */
+	/** 
+	 * faz uma busca gulosa para encontrar m ciclos. 
+	 * pega sempre o vizinho mais próximos. utilizado
+	 * para inicializar o feromônio. 
+	 * */
 	public double nearestNeighborTour(List<Node> nl) {
+		double totalTourLength = 0.0;
 		
-		List<Node> path = new ArrayList<Node>();
-		int remove = 0;
-		double tourLength = 0;
-		Node nextNode= nl.get(0);
-		
-		Node startingNode = nl.get(nl.size() - 1);
-		path.add(startingNode);
-		nl.remove(startingNode);
-		
-		while(nl.size() > 0) {
-			double minDistance = calculateDistance(startingNode, nl.get(0));
-			remove = 0;
+		for(int i = 0; i < m; i++) {
+			List<Node> nlist = new ArrayList<Node>(nl);
+			List<Node> path = new ArrayList<Node>();
+			double tourLength = 0;
 			
-			for(int i = 1; i < nl.size(); i++) {
+			Node startingNode = nlist.get(0);
+			Node nextNode = null;
+			Node remove = null;
+			
+			path.add(startingNode);
+			nlist.remove(startingNode);
+			
+			while(nlist.size() > 0) {
+				List<Node> neighbors = getNeighbors(startingNode, nlist);
 				
-				double distance = calculateDistance(startingNode, nl.get(i));
+				double minDistance = Double.MAX_VALUE;
 				
-				if(distance != 0 && distance < minDistance) {
-					minDistance = distance;
-					nextNode = nl.get(i);
-					remove = i;
+				for(Node n : neighbors) {
+					double distance = calculateDistance(startingNode, n);
+					
+					if(distance != 0 && distance < minDistance) {
+						minDistance = distance;
+						nextNode = n;
+						remove = n;
+					}
 				}
+				
+				// adiciona nextNode aos nós conectados de startingNode e vice-versa
+				startingNode.connections.add(nextNode);
+				nextNode.connections.add(startingNode);
+				
+				startingNode = nextNode;
+				nlist.remove(remove);
+				path.add(nextNode);
+				tourLength += minDistance;
 			}
 			
-			startingNode = nextNode;
-			nl.remove(remove);
-			path.add(nextNode);
-			tourLength += minDistance;
+			// adiciona nextNode aos nós conectados de startingNode e vice-versa
+			nextNode.connections.add(path.get(0));
+			path.get(0).connections.add(nextNode);
+			
+			/* fecha o ciclo */
+			path.add(path.get(0));
+			tourLength += calculateDistance(nextNode, path.get(0));
+			totalTourLength += tourLength;
 		}
 		
-		/* fecha o ciclo */
-		path.add(path.get(0));
-		tourLength += calculateDistance(nextNode, path.get(0));
-
-		return tourLength;
+		clearNodesConnections(nl);
+		
+		return totalTourLength;
+	}
+	
+	/** retorna os vizinhos factíveis */
+	public List<Node> getNeighbors(Node node, List<Node> nodeList){
+		List<Node> neighbors = new ArrayList<Node>();
+		
+		for(Node n : nodeList) {
+			if(!node.connections.contains(n)) {
+				neighbors.add(n);
+			}
+		}
+		
+		return neighbors;
+	}
+	
+	/** limpa as conexões feitas por cada nó */
+	public void clearNodesConnections(List<Node> nl) {
+		for(Node n : nl) {
+			n.connections.clear();
+		}
 	}
 	
 	/** calcula o custo de um tour */
@@ -409,15 +540,38 @@ public class ACS {
 
 		return Math.sqrt(result);
 	}
-
-	public void printTour(List<Node> tour, double tourLength, String title) {
-		System.out.println(title + " Length: " + tourLength);
-		
-		System.out.print("tour: [");
-		for(int i = 0; i < tour.size(); i++) {
-			if(i==0)System.out.print(tour.get(i).id);
-			else	System.out.print(", "+ tour.get(i).id);
-		}
-		System.out.println("]");
+	
+	public void setWithLocalSearch(boolean with) {
+		this.withLocalSearch = with;
 	}
+	
+	public void printPheromoneMatrix() {
+		System.out.print("[ ");
+		for(List<Double> r : pheromoneMatrix) {
+			for(Double d : r) {
+				System.out.print(d + ", ");
+			}
+			System.out.println();
+		}
+		System.out.print(" ]");
+	}
+	
+	public void printTour(List<List<Node>> cycles, double cyclesLength, String title) {
+		output.append("\n\n" + title + " Length: " + cyclesLength +"\n");
+		int idx = 1;
+		
+		for(List<Node> c : cycles) {
+			output.append("tour " + (idx++) + " : [");
+			for(int i = 0; i < c.size(); i++) {
+				if(i==0) output.append(" " + c.get(i).id);
+				else	 output.append(", "+ c.get(i).id);
+			}
+			output.append("]\n");
+		}
+	}
+	
+	public void setOutput(JTextArea output) {
+		this.output = output;
+	}
+
 }
